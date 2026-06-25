@@ -27,10 +27,19 @@ export interface RemotePersistenceOptions {
  *   GET    {endpoint}/reports?...     -> { bugs: BugReportRecord[]; total }
  *   PATCH  {endpoint}/reports/{id}    -> { bug: BugReportRecord }
  */
+// `endpoint` is often pasted without a scheme; `fetch` then throws "Failed to
+// parse URL" on every request. Prepend https:// (mirrors the S3 adapter) and
+// strip any trailing slash so `${base}/reports` is always well-formed.
+function normalizeBase(raw: string): string {
+  const value = (raw ?? "").trim();
+  const withScheme = !value || /^https?:\/\//i.test(value) ? value : `https://${value}`;
+  return withScheme.replace(/\/$/, "");
+}
+
 export function createRemotePersistence(
   options: RemotePersistenceOptions,
 ): PersistenceAdapter {
-  const base = options.endpoint.replace(/\/$/, "");
+  const base = normalizeBase(options.endpoint);
 
   function headers(json: boolean): Record<string, string> {
     const h: Record<string, string> = { ...options.headers };
