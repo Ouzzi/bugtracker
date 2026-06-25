@@ -117,6 +117,37 @@ describe("createBugReportHandlers", () => {
     expect(store.rows[0].screenshots[0].url).toMatch(/^https:\/\/cdn\.test\//);
   });
 
+  it("caps the number of screenshots and notes the overflow", async () => {
+    const store = memoryPersistence();
+    let uploads = 0;
+    const h = createBugReportHandlers({
+      persistence: store.adapter,
+      auth: { getActor: async () => member },
+      limits: { maxScreenshots: 2 },
+      upload: {
+        isConfigured: () => true,
+        upload: async (key) => {
+          uploads++;
+          return `https://cdn.test/${key}`;
+        },
+      },
+    });
+    const fd = new FormData();
+    fd.append("title", "Many shots");
+    for (let i = 0; i < 5; i++) {
+      fd.append("screenshot", new File([new Uint8Array([i])], `s${i}.png`, { type: "image/png" }), `s${i}.png`);
+    }
+    const res = await h.collection.POST(
+      new Request("http://localhost/api/bugs", { method: "POST", body: fd }),
+    );
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.screenshotCount).toBe(2);
+    expect(uploads).toBe(2);
+    expect(store.rows[0].screenshots).toHaveLength(2);
+    expect(body.screenshotNote).toContain("Too many screenshots");
+  });
+
   it("blocks 429 when rate limited", async () => {
     const { collection } = makeHandlers(member, { rateOk: false });
     const res = await collection.POST(form({ title: "x" }));

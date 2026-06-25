@@ -16,6 +16,7 @@ const SHOT_EXT_BY_MIME: Record<string, string> = {
 const DEFAULT_LIMITS: BugtrackerLimits = {
   rate: { count: 20, windowMs: 60 * 60 * 1000 }, // 20 reports / hour
   maxScreenshotBytes: 5 * 1024 * 1024, // 5 MB
+  maxScreenshots: 10,
   titleMax: 200,
   descriptionMax: 5000,
 };
@@ -34,6 +35,7 @@ const DEFAULT_MESSAGES: BugtrackerMessages = {
   storageNotConfigured: "Object storage (S3) is not configured on the server",
   unsupportedType: (type) => `Unsupported screenshot type: ${type || "unknown"}`,
   screenshotTooLarge: "Screenshot exceeds the 5 MB limit",
+  tooManyScreenshots: (max) => `Too many screenshots — only the first ${max} were kept`,
   uploadFailed: (reason) => `Screenshot upload failed: ${reason}`,
 };
 
@@ -83,35 +85,50 @@ export function createBugReportHandlers(
     // Best-effort screenshots (zero or more). We record *why* any were dropped so
     // a missing image is diagnosable: no file means nothing was attached/captured;
     // the other notes point at object-storage config/permissions on the server.
-    const files = form
+    const allFiles = form
       .getAll("screenshot")
       .filter((f): f is File => f instanceof File && f.size > 0);
     const screenshots: BugScreenshot[] = [];
     const notes: string[] = [];
-    if (files.length === 0) {
+    if (allFiles.length === 0) {
       notes.push(messages.noScreenshotCaptured);
     } else if (!upload || !upload.isConfigured()) {
       notes.push(messages.storageNotConfigured);
     } else {
+      // Cap the count so one request can't fan out into unbounded uploads/memory.
+      const files = allFiles.slice(0, limits.maxScreenshots);
+      if (allFiles.length > files.length) {
+        notes.push(messages.tooManyScreenshots(limits.maxScreenshots));
+      }
+      // Validate synchronously, then upload the survivors concurrently while
+      // preserving input order (Promise.all keeps the array order).
+      const valid: File[] = [];
       for (const file of files) {
         if (!SHOT_EXT_BY_MIME[file.type]) {
           notes.push(messages.unsupportedType(file.type));
-          continue;
-        }
-        if (file.size > limits.maxScreenshotBytes) {
+        } else if (file.size > limits.maxScreenshotBytes) {
           notes.push(messages.screenshotTooLarge);
-          continue;
+        } else {
+          valid.push(file);
         }
-        const key = `bugs/${new Date().getFullYear()}/${randomUUID()}.${SHOT_EXT_BY_MIME[file.type]}`;
-        try {
-          const buffer = Buffer.from(await file.arrayBuffer());
-          const url = await upload.upload(key, buffer, file.type);
-          screenshots.push({ url, key });
-        } catch (err) {
-          notes.push(
-            messages.uploadFailed(err instanceof Error ? err.message : "unknown error"),
-          );
-        }
+      }
+      const results = await Promise.all(
+        valid.map(async (file): Promise<{ shot?: BugScreenshot; note?: string }> => {
+          const key = `bugs/${new Date().getFullYear()}/${randomUUID()}.${SHOT_EXT_BY_MIME[file.type]}`;
+          try {
+            const buffer = Buffer.from(await file.arrayBuffer());
+            const url = await upload.upload(key, buffer, file.type);
+            return { shot: { url, key } as BugScreenshot };
+          } catch (err) {
+            return {
+              note: messages.uploadFailed(err instanceof Error ? err.message : "unknown error"),
+            };
+          }
+        }),
+      );
+      for (const r of results) {
+        if (r.shot) screenshots.push(r.shot);
+        else if (r.note) notes.push(r.note);
       }
     }
     const screenshotNote = notes.join("; ");

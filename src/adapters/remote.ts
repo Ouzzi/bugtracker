@@ -1,8 +1,9 @@
-import type {
-  BugReportRecord,
-  ListQuery,
-  NewBugReport,
-  UpdatePatch,
+import {
+  toScreenshots,
+  type BugReportRecord,
+  type ListQuery,
+  type NewBugReport,
+  type UpdatePatch,
 } from "../types.js";
 import type { PersistenceAdapter } from "../server/types.js";
 
@@ -45,6 +46,13 @@ export function createRemotePersistence(
     return res.json();
   }
 
+  // The remote store may run an older version that still returns the legacy
+  // single-screenshot shape (or omits screenshots entirely). Normalise here so
+  // downstream code (and the triage UI) always sees a `screenshots` array.
+  function normalize(bug: any): BugReportRecord {
+    return { ...bug, screenshots: toScreenshots(bug ?? {}) };
+  }
+
   return {
     async create(input: NewBugReport): Promise<BugReportRecord> {
       const res = await fetch(`${base}/reports`, {
@@ -53,7 +61,7 @@ export function createRemotePersistence(
         body: JSON.stringify({ ...input, project: input.project ?? options.project }),
       });
       const data = await readJson(res);
-      return (data.bug ?? data) as BugReportRecord;
+      return normalize(data.bug ?? data);
     },
 
     async list(query: ListQuery): Promise<{ bugs: BugReportRecord[]; total: number }> {
@@ -66,7 +74,7 @@ export function createRemotePersistence(
         headers: headers(false),
       });
       const data = await readJson(res);
-      return { bugs: data.bugs ?? [], total: data.total ?? 0 };
+      return { bugs: (data.bugs ?? []).map(normalize), total: data.total ?? 0 };
     },
 
     async update(id: string, patch: UpdatePatch): Promise<BugReportRecord | null> {
@@ -77,7 +85,7 @@ export function createRemotePersistence(
       });
       if (res.status === 404) return null;
       const data = await readJson(res);
-      return (data.bug ?? data) as BugReportRecord;
+      return normalize(data.bug ?? data);
     },
   };
 }

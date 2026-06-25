@@ -21,6 +21,31 @@ export interface BugScreenshot {
   key?: string;
 }
 
+/**
+ * Normalises a raw storage/transport row's screenshots into the canonical array.
+ * Prefers the `screenshots` array; falls back to a legacy single-screenshot row
+ * (`screenshotUrl`/`screenshotKey`); otherwise empty. The single place every
+ * adapter should funnel rows through so legacy data never reaches the UI as
+ * `undefined`.
+ */
+export function toScreenshots(row: {
+  screenshots?: unknown;
+  screenshotUrl?: unknown;
+  screenshotKey?: unknown;
+}): BugScreenshot[] {
+  if (Array.isArray(row.screenshots) && row.screenshots.length) {
+    return row.screenshots
+      .filter((s): s is { url: unknown; key?: unknown } => !!s && typeof s === "object")
+      .map((s) => ({ url: String(s.url ?? ""), key: s.key ? String(s.key) : undefined }));
+  }
+  if (row.screenshotUrl) {
+    return [
+      { url: String(row.screenshotUrl), key: row.screenshotKey ? String(row.screenshotKey) : undefined },
+    ];
+  }
+  return [];
+}
+
 // A persisted report, normalised to a transport-friendly shape. Persistence
 // adapters map their own storage rows to/from this; the triage UI renders it.
 export interface BugReportRecord {

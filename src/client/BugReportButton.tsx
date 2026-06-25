@@ -185,15 +185,10 @@ export function BugReportButton({
   }
 
   function addImageFiles(files: FileList | File[] | null | undefined) {
-    if (!files) return false;
-    let added = false;
+    if (!files) return;
     for (const file of Array.from(files)) {
-      if (file.type.startsWith("image/")) {
-        addShot(file);
-        added = true;
-      }
+      if (file.type.startsWith("image/")) addShot(file);
     }
-    return added;
   }
 
   function onPickFiles(e: React.ChangeEvent<HTMLInputElement>) {
@@ -206,17 +201,21 @@ export function BugReportButton({
     const items = e.clipboardData?.items;
     if (!items) return;
     const images: File[] = [];
+    let hasText = false;
     for (const item of Array.from(items)) {
       if (item.kind === "file" && item.type.startsWith("image/")) {
         const file = item.getAsFile();
         if (file) images.push(file);
+      } else if (item.kind === "string") {
+        hasText = true;
       }
     }
-    if (images.length) {
-      // Consume the paste as an image attachment so it doesn't also land as text.
-      e.preventDefault();
-      addImageFiles(images);
-    }
+    if (!images.length) return;
+    addImageFiles(images);
+    // Only swallow the paste when it's image-only. If the clipboard also carries
+    // text (e.g. copied from a spreadsheet), let the text land in the focused
+    // field as the user expects and just attach the image alongside it.
+    if (!hasText) e.preventDefault();
   }
 
   function handleOpenChange(next: boolean) {
