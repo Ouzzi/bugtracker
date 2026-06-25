@@ -1,0 +1,244 @@
+/*
+ * @oussama/bugtracker — self-contained styles. No Tailwind required.
+ * Import once globally, e.g. in your root layout:  import "@oussama/bugtracker/styles.css";
+ *
+ * Everything is themeable through CSS variables. Override them on :root (or pass
+ * `theme` props to the components, which set these same variables inline):
+ */
+.bgt-root {
+  --bgt-accent: #0f172a;
+  --bgt-accent-hover: #334155;
+  --bgt-accent-fg: #ffffff;
+  --bgt-ring: #94a3b8;
+  --bgt-bg: #ffffff;
+  --bgt-fg: #0f172a;
+  --bgt-muted: #64748b;
+  --bgt-border: #e2e8f0;
+  --bgt-field-bg: #ffffff;
+  --bgt-radius: 0.5rem;
+  --bgt-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.2);
+  --bgt-z: 2147483000;
+  color: var(--bgt-fg);
+  font-family: inherit;
+}
+
+/* Dark mode: follow a `.dark` ancestor (next-themes class strategy) and the OS. */
+.dark .bgt-root,
+.bgt-root[data-bgt-theme="dark"] {
+  --bgt-accent: #334155;
+  --bgt-accent-hover: #475569;
+  --bgt-accent-fg: #ffffff;
+  --bgt-ring: #64748b;
+  --bgt-bg: #0f172a;
+  --bgt-fg: #e2e8f0;
+  --bgt-muted: #94a3b8;
+  --bgt-border: #1e293b;
+  --bgt-field-bg: #020617;
+}
+
+/* ---- Floating button -------------------------------------------------- */
+.bgt-widget {
+  position: fixed;
+  z-index: var(--bgt-z);
+}
+.bgt-widget[data-pos="bottom-right"] { bottom: 1rem; right: 1rem; }
+.bgt-widget[data-pos="bottom-left"] { bottom: 1rem; left: 1rem; }
+.bgt-widget[data-pos="top-right"] { top: 1rem; right: 1rem; }
+.bgt-widget[data-pos="top-left"] { top: 1rem; left: 1rem; }
+@media print { .bgt-widget { display: none; } }
+
+.bgt-fab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 3rem;
+  width: 3rem;
+  border: none;
+  border-radius: 9999px;
+  background: var(--bgt-accent);
+  color: var(--bgt-accent-fg);
+  box-shadow: var(--bgt-shadow);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.bgt-fab:hover { background: var(--bgt-accent-hover); }
+.bgt-fab:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--bgt-ring); }
+.bgt-fab:disabled { opacity: 0.7; cursor: default; }
+.bgt-fab svg { height: 1.25rem; width: 1.25rem; }
+.bgt-spin { animation: bgt-spin 0.8s linear infinite; }
+@keyframes bgt-spin { to { transform: rotate(360deg); } }
+
+.bgt-tooltip {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  border-radius: 0.375rem;
+  background: var(--bgt-accent);
+  color: var(--bgt-accent-fg);
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: var(--bgt-shadow);
+  transition: opacity 0.15s ease;
+}
+.bgt-widget[data-pos$="right"] .bgt-tooltip { right: 3.5rem; }
+.bgt-widget[data-pos$="left"] .bgt-tooltip { left: 3.5rem; }
+.bgt-fab:hover + .bgt-tooltip { opacity: 1; }
+
+/* ---- Dialog ----------------------------------------------------------- */
+.bgt-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 0.5);
+  z-index: var(--bgt-z);
+  animation: bgt-fade 0.15s ease;
+}
+.bgt-content {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: calc(var(--bgt-z) + 1);
+  width: calc(100vw - 2rem);
+  max-width: 32rem;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  background: var(--bgt-bg);
+  color: var(--bgt-fg);
+  border-radius: var(--bgt-radius);
+  box-shadow: var(--bgt-shadow);
+  padding: 1.25rem;
+}
+@keyframes bgt-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.bgt-title { font-size: 1.125rem; font-weight: 600; margin: 0; }
+.bgt-desc { font-size: 0.875rem; color: var(--bgt-muted); margin: 0.25rem 0 0; }
+
+/* ---- Form fields ------------------------------------------------------ */
+.bgt-field { margin-top: 1rem; }
+.bgt-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-bottom: 0.375rem;
+}
+.bgt-input,
+.bgt-textarea,
+.bgt-select {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 0.875rem;
+  color: var(--bgt-fg);
+  background: var(--bgt-field-bg);
+  border: 1px solid var(--bgt-border);
+  border-radius: 0.375rem;
+  padding: 0.5rem 0.625rem;
+}
+.bgt-select { height: 2.25rem; padding: 0 0.5rem; }
+.bgt-textarea { resize: vertical; min-height: 4.5rem; }
+.bgt-input:focus,
+.bgt-textarea:focus,
+.bgt-select:focus {
+  outline: none;
+  border-color: var(--bgt-ring);
+  box-shadow: 0 0 0 2px var(--bgt-ring);
+}
+
+.bgt-shot {
+  max-height: 12rem;
+  width: 100%;
+  object-fit: contain;
+  object-position: top;
+  border: 1px solid var(--bgt-border);
+  border-radius: 0.375rem;
+}
+.bgt-hint { font-size: 0.75rem; color: var(--bgt-muted); margin: 0; }
+.bgt-error { font-size: 0.875rem; color: #dc2626; margin: 0.5rem 0 0; }
+
+/* ---- Buttons ---------------------------------------------------------- */
+.bgt-actions {
+  margin-top: 1.25rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+.bgt-btn {
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 0.375rem;
+  padding: 0.4rem 0.8rem;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+.bgt-btn:disabled { opacity: 0.6; cursor: default; }
+.bgt-btn-primary { background: var(--bgt-accent); color: var(--bgt-accent-fg); }
+.bgt-btn-primary:hover:not(:disabled) { background: var(--bgt-accent-hover); }
+.bgt-btn-ghost {
+  background: transparent;
+  color: var(--bgt-fg);
+  border-color: var(--bgt-border);
+}
+.bgt-btn-ghost:hover:not(:disabled) { background: var(--bgt-border); }
+
+/* ---- Triage list ------------------------------------------------------ */
+.bgt-view { display: flex; flex-direction: column; gap: 1rem; }
+.bgt-filter { display: flex; align-items: center; gap: 0.5rem; }
+.bgt-filter .bgt-select { width: auto; }
+.bgt-empty {
+  border: 1px dashed var(--bgt-border);
+  border-radius: var(--bgt-radius);
+  padding: 1.5rem;
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--bgt-muted);
+}
+.bgt-card {
+  border: 1px solid var(--bgt-border);
+  border-radius: var(--bgt-radius);
+  padding: 1rem;
+}
+.bgt-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.bgt-card-title { font-weight: 500; margin: 0; }
+.bgt-card-meta { font-size: 0.75rem; color: var(--bgt-muted); margin: 0.125rem 0 0; }
+.bgt-card-body {
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--bgt-muted);
+  white-space: pre-wrap;
+}
+.bgt-card-shot {
+  display: block;
+  margin-top: 0.75rem;
+  max-height: 14rem;
+  width: 100%;
+  object-fit: contain;
+  object-position: top;
+  border: 1px solid var(--bgt-border);
+  border-radius: 0.375rem;
+}
+.bgt-card-row { margin-top: 0.75rem; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.bgt-badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: 9999px;
+  padding: 0.125rem 0.5rem;
+  background: var(--bgt-border);
+  color: var(--bgt-fg);
+}
+.bgt-badge[data-status="open"] { background: #dbeafe; color: #1e40af; }
+.bgt-badge[data-status="in_progress"] { background: #fef3c7; color: #92400e; }
+.bgt-badge[data-status="resolved"] { background: #dcfce7; color: #166534; }
+.bgt-badge[data-status="closed"] { background: #e2e8f0; color: #334155; }

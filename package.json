@@ -1,0 +1,79 @@
+{
+  "name": "@oussama/bugtracker",
+  "version": "0.1.0",
+  "description": "Drop-in bug reporter (floating button + modal, screenshot capture) and triage UI, framework-light and persistence-agnostic.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": [
+    "*.css"
+  ],
+  "files": [
+    "dist",
+    "styles.css",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "default": "./dist/server/index.js"
+    },
+    "./adapters/mongoose": {
+      "types": "./dist/adapters/mongoose.d.ts",
+      "default": "./dist/adapters/mongoose.js"
+    },
+    "./adapters/remote": {
+      "types": "./dist/adapters/remote.d.ts",
+      "default": "./dist/adapters/remote.js"
+    },
+    "./adapters/s3": {
+      "types": "./dist/adapters/s3.d.ts",
+      "default": "./dist/adapters/s3.js"
+    },
+    "./styles.css": "./styles.css"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "prepare": "npm run build"
+  },
+  "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.0",
+    "html-to-image": "^1.11.0"
+  },
+  "peerDependencies": {
+    "@aws-sdk/client-s3": ">=3",
+    "mongoose": ">=7",
+    "next": ">=14",
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "@aws-sdk/client-s3": {
+      "optional": true
+    },
+    "mongoose": {
+      "optional": true
+    },
+    "next": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@aws-sdk/client-s3": "^3.1068.0",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "mongoose": "^9.7.0",
+    "next": "^16.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^5",
+    "vitest": "^4.0.0"
+  }
+}

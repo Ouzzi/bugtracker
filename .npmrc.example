@@ -1,0 +1,5 @@
+# Publishing & installing @oussama/bugtracker via GitHub Packages.
+# Copy to .npmrc and replace TOKEN with a PAT that has read:packages
+# (write:packages to publish). Do NOT commit a real token.
+@oussama:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=TOKEN
