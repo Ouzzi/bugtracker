@@ -1,0 +1,9 @@
+# Present so npm does NOT fall back to .gitignore when packing (which would wrongly
+# exclude the built dist/). The `files` field in package.json is the real allowlist
+# (dist, styles.css, README.md); everything else below is belt-and-suspenders.
+src/
+test/
+tsconfig*.json
+.npmrc.example
+.gitignore
+*.tsbuildinfo

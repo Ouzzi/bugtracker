@@ -10,12 +10,13 @@ import type { PersistenceAdapter } from "../server/types";
 
 type AnyDoc = Record<string, any>;
 
-/** The slice of a Mongoose model this adapter uses (structurally typed). */
+/** The slice of a Mongoose model this adapter uses. Deliberately permissive so a
+ *  real `Model<...>` is assignable without a cast. */
 export interface MongooseBugModel {
-  create(doc: AnyDoc): Promise<AnyDoc>;
-  find(filter: AnyDoc): any;
-  findByIdAndUpdate(id: string, update: AnyDoc, options: AnyDoc): any;
-  countDocuments(filter: AnyDoc): Promise<number>;
+  create(doc: any): any;
+  find(filter: any): any;
+  findByIdAndUpdate(id: any, update: any, options: any): any;
+  countDocuments(filter: any): any;
 }
 
 export interface MongoosePersistenceOptions {
@@ -147,7 +148,9 @@ export function createMongoosePersistence(
       if (patch.status !== undefined) set.status = patch.status;
       if (patch.adminNote !== undefined) set.adminNote = patch.adminNote;
       const doc = await withReporter(
-        m.findByIdAndUpdate(id, { $set: set }, { new: true }),
+        // `returnDocument: "after"` is the non-deprecated equivalent of `new: true`
+        // (Mongoose 6+); returns the updated document.
+        m.findByIdAndUpdate(id, { $set: set }, { returnDocument: "after" }),
       ).lean();
       return doc ? toRecord(doc as AnyDoc) : null;
     },
