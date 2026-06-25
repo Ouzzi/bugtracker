@@ -117,6 +117,69 @@ describe("createBugReportHandlers", () => {
     expect(store.rows[0].screenshots[0].url).toMatch(/^https:\/\/cdn\.test\//);
   });
 
+  it("caps the number of screenshots and notes the overflow", async () => {
+    const store = memoryPersistence();
+    let uploads = 0;
+    const h = createBugReportHandlers({
+      persistence: store.adapter,
+      auth: { getActor: async () => member },
+      limits: { maxScreenshots: 2 },
+      upload: {
+        isConfigured: () => true,
+        upload: async (key) => {
+          uploads++;
+          return `https://cdn.test/${key}`;
+        },
+      },
+    });
+    const fd = new FormData();
+    fd.append("title", "Many shots");
+    for (let i = 0; i < 5; i++) {
+      fd.append("screenshot", new File([new Uint8Array([i])], `s${i}.png`, { type: "image/png" }), `s${i}.png`);
+    }
+    const res = await h.collection.POST(
+      new Request("http://localhost/api/bugs", { method: "POST", body: fd }),
+    );
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.screenshotCount).toBe(2);
+    expect(uploads).toBe(2);
+    expect(store.rows[0].screenshots).toHaveLength(2);
+    expect(body.screenshotNote).toContain("Too many screenshots");
+  });
+
+  it("treats an empty upload URL as a failed screenshot", async () => {
+    const store = memoryPersistence();
+    const h = createBugReportHandlers({
+      persistence: store.adapter,
+      auth: { getActor: async () => member },
+      upload: { isConfigured: () => true, upload: async () => "" },
+    });
+    const fd = new FormData();
+    fd.append("title", "Empty url");
+    fd.append("screenshot", new File([new Uint8Array([1])], "a.png", { type: "image/png" }), "a.png");
+    const res = await h.collection.POST(
+      new Request("http://localhost/api/bugs", { method: "POST", body: fd }),
+    );
+    const body = await res.json();
+    expect(body.screenshotSaved).toBe(false);
+    expect(body.screenshotCount).toBe(0);
+    expect(store.rows[0].screenshots).toHaveLength(0);
+    expect(body.screenshotNote).toContain("upload failed");
+  });
+
+  it("ignores a non-numeric ?limit instead of passing NaN to the adapter", async () => {
+    const { collection, store } = makeHandlers(admin);
+    await collection.POST(form({ title: "one" }));
+    const res = await collection.GET(
+      new Request("http://localhost/api/bugs?limit=abc&skip=xyz"),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(store.rows).toHaveLength(1);
+    expect(body.bugs).toHaveLength(1); // NaN limit would slice to an empty list
+  });
+
   it("blocks 429 when rate limited", async () => {
     const { collection } = makeHandlers(member, { rateOk: false });
     const res = await collection.POST(form({ title: "x" }));

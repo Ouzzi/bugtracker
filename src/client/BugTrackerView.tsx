@@ -199,10 +199,10 @@ function BugCard({
 
       {bug.description && <p className="bgt-card-body">{bug.description}</p>}
 
-      {bug.screenshots.length > 0 ? (
+      {bug.screenshots && bug.screenshots.length > 0 ? (
         <div className="bgt-card-shots">
           {bug.screenshots.map((shot, i) => (
-            <a key={shot.url || i} href={shot.url} target="_blank" rel="noopener noreferrer">
+            <a key={shot.key ?? shot.url ?? i} href={shot.url} target="_blank" rel="noopener noreferrer">
               {/* eslint-disable-next-line @next/next/no-img-element -- external asset, opens full size */}
               <img
                 className="bgt-card-shot"

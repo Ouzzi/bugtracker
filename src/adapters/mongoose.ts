@@ -1,10 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- structural typing over an
    injected Mongoose model keeps this adapter independent of the host's exact types. */
-import type {
-  BugReportRecord,
-  ListQuery,
-  NewBugReport,
-  UpdatePatch,
+import {
+  toScreenshots,
+  type BugReportRecord,
+  type ListQuery,
+  type NewBugReport,
+  type UpdatePatch,
 } from "../types.js";
 import type { PersistenceAdapter } from "../server/types.js";
 
@@ -51,12 +52,7 @@ function toRecord(doc: AnyDoc): BugReportRecord {
     title: doc.title ?? "",
     description: doc.description ?? "",
     // Prefer the screenshots array; fall back to a legacy single-screenshot row.
-    screenshots:
-      Array.isArray(doc.screenshots) && doc.screenshots.length
-        ? doc.screenshots.map((s: AnyDoc) => ({ url: s.url, key: s.key ?? undefined }))
-        : doc.screenshotUrl
-          ? [{ url: doc.screenshotUrl, key: doc.screenshotKey || undefined }]
-          : [],
+    screenshots: toScreenshots(doc),
     screenshotNote: doc.screenshotNote ?? "",
     pageUrl: doc.pageUrl ?? "",
     userAgent: doc.userAgent ?? "",

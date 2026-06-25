@@ -62,12 +62,15 @@ export interface BugtrackerMessages {
   storageNotConfigured: string;
   unsupportedType: (type: string) => string;
   screenshotTooLarge: string;
+  tooManyScreenshots: (max: number) => string;
   uploadFailed: (reason: string) => string;
 }
 
 export interface BugtrackerLimits {
   rate: { count: number; windowMs: number };
   maxScreenshotBytes: number;
+  /** Hard cap on screenshots accepted per report; extras are dropped. */
+  maxScreenshots: number;
   titleMax: number;
   descriptionMax: number;
 }

@@ -61,7 +61,11 @@ export function createS3Upload(options: S3UploadOptions = {}): UploadAdapter {
 
   return {
     isConfigured() {
-      return Boolean(cfg.bucket && cfg.accessKeyId && cfg.secretAccessKey);
+      // publicBaseUrl is required: upload() builds the returned URL from it, so
+      // without it a stored screenshot would resolve to a broken relative path.
+      return Boolean(
+        cfg.bucket && cfg.accessKeyId && cfg.secretAccessKey && cfg.publicBaseUrl,
+      );
     },
     async upload(key: string, body: Buffer, contentType: string): Promise<string> {
       const { PutObjectCommand } = await import("@aws-sdk/client-s3");

@@ -16,6 +16,7 @@ const SHOT_EXT_BY_MIME: Record<string, string> = {
 const DEFAULT_LIMITS: BugtrackerLimits = {
   rate: { count: 20, windowMs: 60 * 60 * 1000 }, // 20 reports / hour
   maxScreenshotBytes: 5 * 1024 * 1024, // 5 MB
+  maxScreenshots: 10,
   titleMax: 200,
   descriptionMax: 5000,
 };
@@ -34,6 +35,7 @@ const DEFAULT_MESSAGES: BugtrackerMessages = {
   storageNotConfigured: "Object storage (S3) is not configured on the server",
   unsupportedType: (type) => `Unsupported screenshot type: ${type || "unknown"}`,
   screenshotTooLarge: "Screenshot exceeds the 5 MB limit",
+  tooManyScreenshots: (max) => `Too many screenshots — only the first ${max} were kept`,
   uploadFailed: (reason) => `Screenshot upload failed: ${reason}`,
 };
 
@@ -57,7 +59,13 @@ export function createBugReportHandlers(
   config: BugtrackerServerConfig,
 ): BugReportHandlers {
   const { persistence, auth, upload, notify, rateLimit, project, onAudit } = config;
-  const limits: BugtrackerLimits = { ...DEFAULT_LIMITS, ...config.limits };
+  const limits: BugtrackerLimits = {
+    ...DEFAULT_LIMITS,
+    ...config.limits,
+    // `rate` is a nested object — deep-merge so a partial override (e.g. just
+    // `count`) can't drop `windowMs` and silently disable rate limiting.
+    rate: { ...DEFAULT_LIMITS.rate, ...config.limits?.rate },
+  };
   const messages: BugtrackerMessages = { ...DEFAULT_MESSAGES, ...config.messages };
   const statuses: readonly BugStatus[] = config.statuses ?? DEFAULT_STATUSES;
 
@@ -83,38 +91,58 @@ export function createBugReportHandlers(
     // Best-effort screenshots (zero or more). We record *why* any were dropped so
     // a missing image is diagnosable: no file means nothing was attached/captured;
     // the other notes point at object-storage config/permissions on the server.
-    const files = form
+    const allFiles = form
       .getAll("screenshot")
       .filter((f): f is File => f instanceof File && f.size > 0);
     const screenshots: BugScreenshot[] = [];
     const notes: string[] = [];
-    if (files.length === 0) {
+    if (allFiles.length === 0) {
       notes.push(messages.noScreenshotCaptured);
     } else if (!upload || !upload.isConfigured()) {
       notes.push(messages.storageNotConfigured);
     } else {
+      // Cap the count so one request can't fan out into unbounded uploads/memory.
+      const files = allFiles.slice(0, limits.maxScreenshots);
+      if (allFiles.length > files.length) {
+        notes.push(messages.tooManyScreenshots(limits.maxScreenshots));
+      }
+      // Validate synchronously, then upload the survivors concurrently while
+      // preserving input order (Promise.all keeps the array order).
+      const valid: File[] = [];
       for (const file of files) {
         if (!SHOT_EXT_BY_MIME[file.type]) {
           notes.push(messages.unsupportedType(file.type));
-          continue;
-        }
-        if (file.size > limits.maxScreenshotBytes) {
+        } else if (file.size > limits.maxScreenshotBytes) {
           notes.push(messages.screenshotTooLarge);
-          continue;
-        }
-        const key = `bugs/${new Date().getFullYear()}/${randomUUID()}.${SHOT_EXT_BY_MIME[file.type]}`;
-        try {
-          const buffer = Buffer.from(await file.arrayBuffer());
-          const url = await upload.upload(key, buffer, file.type);
-          screenshots.push({ url, key });
-        } catch (err) {
-          notes.push(
-            messages.uploadFailed(err instanceof Error ? err.message : "unknown error"),
-          );
+        } else {
+          valid.push(file);
         }
       }
+      const results = await Promise.all(
+        valid.map(async (file): Promise<{ shot?: BugScreenshot; note?: string }> => {
+          const key = `bugs/${new Date().getFullYear()}/${randomUUID()}.${SHOT_EXT_BY_MIME[file.type]}`;
+          try {
+            const buffer = Buffer.from(await file.arrayBuffer());
+            const url = await upload.upload(key, buffer, file.type);
+            // A misbehaving adapter could resolve to an empty URL; don't record a
+            // screenshot that points at nothing — surface it as an upload failure.
+            if (!url) return { note: messages.uploadFailed("empty URL from upload adapter") };
+            const shot: BugScreenshot = { url, key };
+            return { shot };
+          } catch (err) {
+            return {
+              note: messages.uploadFailed(err instanceof Error ? err.message : "unknown error"),
+            };
+          }
+        }),
+      );
+      for (const r of results) {
+        if (r.shot) screenshots.push(r.shot);
+        else if (r.note) notes.push(r.note);
+      }
     }
-    const screenshotNote = notes.join("; ");
+    // De-dup so e.g. three oversized files don't repeat the same note three times.
+    const screenshotNote = [...new Set(notes)].join("; ");
 
     const report = await persistence.create({
       reporterId: actor?.id ?? null,
@@ -154,8 +182,14 @@ export function createBugReportHandlers(
     if (!actor || !actor.isAdmin) return jsonError(messages.forbidden, 403);
 
     const { searchParams } = new URL(request.url);
-    const limit = Math.min(Math.max(Number(searchParams.get("limit") ?? 50), 1), 100);
-    const skip = Math.max(Number(searchParams.get("skip") ?? 0), 0);
+    // Non-numeric query params (`?limit=abc`) must fall back, not propagate NaN
+    // into the persistence adapter (Mongoose `.limit(NaN)` throws).
+    const toInt = (v: string | null, fallback: number) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : fallback;
+    };
+    const limit = Math.min(Math.max(toInt(searchParams.get("limit"), 50), 1), 100);
+    const skip = Math.max(toInt(searchParams.get("skip"), 0), 0);
     const statusParam = searchParams.get("status");
     const status =
       statusParam && statuses.includes(statusParam) ? statusParam : undefined;
