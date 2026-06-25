@@ -79,7 +79,11 @@ export function createS3Upload(options: S3UploadOptions = {}): UploadAdapter {
         }),
       );
       const base = cfg.publicBaseUrl.replace(/\/$/, "");
-      return `${base}/${key}`;
+      // Encode each path segment so a key with URL-unsafe characters (space, #, …)
+      // still yields a valid public URL; the raw `key` is what callers store for
+      // later S3 operations, so only the returned URL is encoded.
+      const encodedKey = key.split("/").map(encodeURIComponent).join("/");
+      return `${base}/${encodedKey}`;
     },
   };
 }
