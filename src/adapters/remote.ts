@@ -3,8 +3,8 @@ import type {
   ListQuery,
   NewBugReport,
   UpdatePatch,
-} from "../types";
-import type { PersistenceAdapter } from "../server/types";
+} from "../types.js";
+import type { PersistenceAdapter } from "../server/types.js";
 
 export interface RemotePersistenceOptions {
   /** Base URL of the central bug store, e.g. "https://bugs.example.com/api". */

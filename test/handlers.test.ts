@@ -87,6 +87,36 @@ describe("createBugReportHandlers", () => {
     expect(body.screenshotNote).toBe("Object storage (S3) is not configured on the server");
   });
 
+  it("uploads multiple screenshots and reports the count", async () => {
+    const store = memoryPersistence();
+    const uploaded: string[] = [];
+    const h = createBugReportHandlers({
+      persistence: store.adapter,
+      auth: { getActor: async () => member },
+      upload: {
+        isConfigured: () => true,
+        upload: async (key) => {
+          uploaded.push(key);
+          return `https://cdn.test/${key}`;
+        },
+      },
+    });
+    const fd = new FormData();
+    fd.append("title", "Two shots");
+    fd.append("screenshot", new File([new Uint8Array([1])], "a.png", { type: "image/png" }), "a.png");
+    fd.append("screenshot", new File([new Uint8Array([2])], "b.jpg", { type: "image/jpeg" }), "b.jpg");
+    const res = await h.collection.POST(
+      new Request("http://localhost/api/bugs", { method: "POST", body: fd }),
+    );
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.screenshotSaved).toBe(true);
+    expect(body.screenshotCount).toBe(2);
+    expect(uploaded).toHaveLength(2);
+    expect(store.rows[0].screenshots).toHaveLength(2);
+    expect(store.rows[0].screenshots[0].url).toMatch(/^https:\/\/cdn\.test\//);
+  });
+
   it("blocks 429 when rate limited", async () => {
     const { collection } = makeHandlers(member, { rateOk: false });
     const res = await collection.POST(form({ title: "x" }));

@@ -148,14 +148,69 @@
   box-shadow: 0 0 0 2px var(--bgt-ring);
 }
 
-.bgt-shot {
-  max-height: 12rem;
-  width: 100%;
-  object-fit: contain;
+/* Screenshot gallery: thumbnails with a remove (×) control + an add (+) tile. */
+.bgt-shots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+  margin-bottom: 0.5rem;
+}
+.bgt-shot-item {
+  position: relative;
+  height: 5rem;
+}
+.bgt-shot-thumb {
+  display: block;
+  height: 5rem;
+  width: auto;
+  max-width: 9rem;
+  object-fit: cover;
   object-position: top;
   border: 1px solid var(--bgt-border);
   border-radius: 0.375rem;
 }
+.bgt-shot-remove {
+  position: absolute;
+  top: -0.5rem;
+  right: -0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.375rem;
+  width: 1.375rem;
+  padding: 0;
+  border: 2px solid var(--bgt-bg);
+  border-radius: 9999px;
+  background: var(--bgt-accent);
+  color: var(--bgt-accent-fg);
+  cursor: pointer;
+  box-shadow: var(--bgt-shadow);
+}
+.bgt-shot-remove:hover { background: var(--bgt-accent-hover); }
+.bgt-shot-remove:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--bgt-ring); }
+.bgt-shot-remove svg { height: 0.75rem; width: 0.75rem; }
+.bgt-add {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.125rem;
+  height: 5rem;
+  min-width: 5rem;
+  padding: 0 0.5rem;
+  font: inherit;
+  font-size: 0.7rem;
+  color: var(--bgt-muted);
+  background: transparent;
+  border: 1px dashed var(--bgt-border);
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.bgt-add:hover { border-color: var(--bgt-ring); color: var(--bgt-fg); }
+.bgt-add:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--bgt-ring); }
+.bgt-add svg { height: 1.1rem; width: 1.1rem; }
+.bgt-file-hidden { display: none; }
 .bgt-hint { font-size: 0.75rem; color: var(--bgt-muted); margin: 0; }
 .bgt-error { font-size: 0.875rem; color: #dc2626; margin: 0.5rem 0 0; }
 
@@ -218,12 +273,18 @@
   color: var(--bgt-muted);
   white-space: pre-wrap;
 }
+.bgt-card-shots {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
 .bgt-card-shot {
   display: block;
-  margin-top: 0.75rem;
-  max-height: 14rem;
-  width: 100%;
-  object-fit: contain;
+  height: 8rem;
+  width: auto;
+  max-width: 100%;
+  object-fit: cover;
   object-position: top;
   border: 1px solid var(--bgt-border);
   border-radius: 0.375rem;

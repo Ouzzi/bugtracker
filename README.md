@@ -2,7 +2,9 @@
 
 A drop-in bug reporter you can reuse across all your projects:
 
-- **Floating button + modal** with automatic page **screenshot** capture.
+- **Floating button + modal** with automatic page **screenshot** capture, plus
+  multiple screenshots: remove one (×), add more (＋ / file picker), or paste
+  images straight from the clipboard (Ctrl/Cmd+V).
 - **Triage page** to view, filter, status-change and annotate reports.
 - **Persistence-agnostic** via adapters — local Mongoose DB today, other DBs or a
   central remote inbox by config.

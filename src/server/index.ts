@@ -1,5 +1,5 @@
 // Server entry point — route-handler factory + adapter contracts.
-export { createBugReportHandlers } from "./handlers";
+export { createBugReportHandlers } from "./handlers.js";
 export type {
   Actor,
   AuthAdapter,
@@ -11,12 +11,13 @@ export type {
   PersistenceAdapter,
   RateLimitAdapter,
   UploadAdapter,
-} from "./types";
+} from "./types.js";
 export type {
   BugReportRecord,
+  BugScreenshot,
   BugStatus,
   ListQuery,
   NewBugReport,
   UpdatePatch,
-} from "../types";
-export { DEFAULT_STATUSES, DEFAULT_STATUS_LABELS } from "../types";
+} from "../types.js";
+export { DEFAULT_STATUSES, DEFAULT_STATUS_LABELS } from "../types.js";

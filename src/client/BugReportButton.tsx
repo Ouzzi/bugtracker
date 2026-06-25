@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { capturePage } from "./capture";
-import { themeVars, type BugReportTheme } from "./theme";
+import { capturePage } from "./capture.js";
+import { themeVars, type BugReportTheme } from "./theme.js";
 
-export type { BugReportTheme } from "./theme";
+export type { BugReportTheme } from "./theme.js";
 
 export interface BugReportLabels {
   /** Tooltip + aria-label on the floating button. */
@@ -18,6 +18,9 @@ export interface BugReportLabels {
   descriptionPlaceholder: string;
   screenshotLabel: string;
   noScreenshot: string;
+  addScreenshot: string;
+  removeScreenshot: string;
+  pasteHint: string;
   cancel: string;
   submit: string;
   submitting: string;
@@ -28,13 +31,16 @@ export const DEFAULT_LABELS: BugReportLabels = {
   trigger: "Report a bug",
   title: "Report a bug",
   description:
-    "A screenshot of this page is attached automatically. Tell us what went wrong.",
+    "A screenshot of this page is attached automatically. Remove it, add more, or paste images — then tell us what went wrong.",
   titleLabel: "Title",
   titlePlaceholder: "e.g. Save button does nothing on the editor",
   descriptionLabel: "Description",
   descriptionPlaceholder: "What did you expect, and what happened instead?",
-  screenshotLabel: "Screenshot",
-  noScreenshot: "No screenshot could be captured — the report will be sent without one.",
+  screenshotLabel: "Screenshots",
+  noScreenshot: "No screenshot attached.",
+  addScreenshot: "Add image",
+  removeScreenshot: "Remove screenshot",
+  pasteHint: "Tip: paste an image with Ctrl+V.",
   cancel: "Cancel",
   submit: "Send report",
   submitting: "Sending...",
@@ -45,6 +51,7 @@ export interface BugSubmitResult {
   ok?: boolean;
   id?: string;
   screenshotSaved?: boolean;
+  screenshotCount?: number;
   screenshotNote?: string;
   [key: string]: unknown;
 }
@@ -62,6 +69,12 @@ export interface BugReportButtonProps {
   onSubmitted?: (result: BugSubmitResult) => void;
   /** Called with a human-readable message when a submit fails. */
   onError?: (message: string) => void;
+}
+
+interface Shot {
+  id: string;
+  blob: Blob;
+  url: string;
 }
 
 function BugIcon() {
@@ -92,6 +105,28 @@ function Spinner() {
   );
 }
 
+function XIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5 12h14" />
+      <path d="M12 5v14" />
+    </svg>
+  );
+}
+
+let shotSeq = 0;
+
 export function BugReportButton({
   endpoint = "/api/bugs",
   captureScreenshot = true,
@@ -104,22 +139,36 @@ export function BugReportButton({
 }: BugReportButtonProps) {
   const labels = { ...DEFAULT_LABELS, ...labelOverrides };
   const vars = themeVars(theme);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [open, setOpen] = useState(false);
   const [capturing, setCapturing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [shot, setShot] = useState<Blob | null>(null);
-  const [shotUrl, setShotUrl] = useState<string | null>(null);
+  const [shots, setShots] = useState<Shot[]>([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [error, setError] = useState("");
 
-  const reset = useCallback(() => {
-    setShotUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return null;
+  const addShot = useCallback((blob: Blob) => {
+    setShots((prev) => [
+      ...prev,
+      { id: `s${++shotSeq}`, blob, url: URL.createObjectURL(blob) },
+    ]);
+  }, []);
+
+  const removeShot = useCallback((id: string) => {
+    setShots((prev) => {
+      const found = prev.find((s) => s.id === id);
+      if (found) URL.revokeObjectURL(found.url);
+      return prev.filter((s) => s.id !== id);
     });
-    setShot(null);
+  }, []);
+
+  const reset = useCallback(() => {
+    setShots((prev) => {
+      prev.forEach((s) => URL.revokeObjectURL(s.url));
+      return [];
+    });
     setTitle("");
     setDescription("");
     setError("");
@@ -130,10 +179,44 @@ export function BugReportButton({
     setCapturing(true);
     // Capture before opening the dialog so the form is never in the screenshot.
     const blob = captureScreenshot ? await capturePage() : null;
-    setShot(blob);
-    setShotUrl(blob ? URL.createObjectURL(blob) : null);
+    if (blob) addShot(blob);
     setOpen(true);
     setCapturing(false);
+  }
+
+  function addImageFiles(files: FileList | File[] | null | undefined) {
+    if (!files) return false;
+    let added = false;
+    for (const file of Array.from(files)) {
+      if (file.type.startsWith("image/")) {
+        addShot(file);
+        added = true;
+      }
+    }
+    return added;
+  }
+
+  function onPickFiles(e: React.ChangeEvent<HTMLInputElement>) {
+    addImageFiles(e.target.files);
+    // Reset so picking the same file again still fires onChange.
+    e.target.value = "";
+  }
+
+  function onPaste(e: React.ClipboardEvent) {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const images: File[] = [];
+    for (const item of Array.from(items)) {
+      if (item.kind === "file" && item.type.startsWith("image/")) {
+        const file = item.getAsFile();
+        if (file) images.push(file);
+      }
+    }
+    if (images.length) {
+      // Consume the paste as an image attachment so it doesn't also land as text.
+      e.preventDefault();
+      addImageFiles(images);
+    }
   }
 
   function handleOpenChange(next: boolean) {
@@ -154,7 +237,7 @@ export function BugReportButton({
       fd.append("title", title.trim());
       fd.append("description", description.trim());
       fd.append("pageUrl", window.location.pathname + window.location.search);
-      if (shot) fd.append("screenshot", shot, "screenshot.jpg");
+      shots.forEach((s, i) => fd.append("screenshot", s.blob, `screenshot-${i + 1}.png`));
 
       const res = await fetch(endpoint, { method: "POST", body: fd });
       const data = (await res.json().catch(() => ({}))) as BugSubmitResult;
@@ -195,7 +278,7 @@ export function BugReportButton({
       <Dialog.Root open={open} onOpenChange={handleOpenChange}>
         <Dialog.Portal>
           <Dialog.Overlay className="bgt-overlay" />
-          <Dialog.Content className="bgt-root bgt-content" style={vars}>
+          <Dialog.Content className="bgt-root bgt-content" style={vars} onPaste={onPaste}>
             <Dialog.Title className="bgt-title">{labels.title}</Dialog.Title>
             <Dialog.Description className="bgt-desc">
               {labels.description}
@@ -233,12 +316,43 @@ export function BugReportButton({
 
             <div className="bgt-field">
               <span className="bgt-label">{labels.screenshotLabel}</span>
-              {shotUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element -- local object URL
-                <img className="bgt-shot" src={shotUrl} alt="Captured page screenshot" />
-              ) : (
-                <p className="bgt-hint">{labels.noScreenshot}</p>
-              )}
+              <div className="bgt-shots">
+                {shots.map((s) => (
+                  <div key={s.id} className="bgt-shot-item">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- local object URL */}
+                    <img className="bgt-shot-thumb" src={s.url} alt="Attached screenshot" />
+                    <button
+                      type="button"
+                      className="bgt-shot-remove"
+                      aria-label={labels.removeScreenshot}
+                      onClick={() => removeShot(s.id)}
+                    >
+                      <XIcon />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  className="bgt-add"
+                  onClick={() => fileInputRef.current?.click()}
+                  title={labels.addScreenshot}
+                >
+                  <PlusIcon />
+                  <span>{labels.addScreenshot}</span>
+                </button>
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="bgt-file-hidden"
+                onChange={onPickFiles}
+              />
+              <p className="bgt-hint">
+                {shots.length === 0 ? `${labels.noScreenshot} ` : ""}
+                {labels.pasteHint}
+              </p>
             </div>
 
             {error && <p className="bgt-error">{error}</p>}

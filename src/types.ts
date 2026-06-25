@@ -15,6 +15,12 @@ export const DEFAULT_STATUS_LABELS: Record<string, string> = {
   closed: "Closed",
 };
 
+// A single stored screenshot: its public URL plus the storage key (for cleanup).
+export interface BugScreenshot {
+  url: string;
+  key?: string;
+}
+
 // A persisted report, normalised to a transport-friendly shape. Persistence
 // adapters map their own storage rows to/from this; the triage UI renders it.
 export interface BugReportRecord {
@@ -24,8 +30,11 @@ export interface BugReportRecord {
   reporterEmail?: string;
   title: string;
   description: string;
-  screenshotUrl: string;
-  screenshotKey?: string;
+  // Zero or more screenshots. Adapters reading legacy single-screenshot rows
+  // should map them into a one-element array here.
+  screenshots: BugScreenshot[];
+  // Diagnostic note when some/all screenshots weren't stored (browser capture
+  // failed, storage unconfigured, upload error, …).
   screenshotNote: string;
   pageUrl: string;
   userAgent: string;
@@ -45,8 +54,7 @@ export interface NewBugReport {
   reporterEmail?: string;
   title: string;
   description: string;
-  screenshotUrl: string;
-  screenshotKey: string;
+  screenshots: BugScreenshot[];
   screenshotNote: string;
   pageUrl: string;
   userAgent: string;

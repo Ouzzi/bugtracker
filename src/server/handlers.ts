@@ -1,11 +1,11 @@
 import { randomUUID } from "crypto";
-import { DEFAULT_STATUSES, type BugStatus } from "../types";
+import { DEFAULT_STATUSES, type BugScreenshot, type BugStatus } from "../types.js";
 import type {
   BugReportHandlers,
   BugtrackerLimits,
   BugtrackerMessages,
   BugtrackerServerConfig,
-} from "./types";
+} from "./types.js";
 
 const SHOT_EXT_BY_MIME: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -80,33 +80,41 @@ export function createBugReportHandlers(
       return jsonError(messages.descriptionTooLong);
     }
 
-    // Best-effort screenshot. We record *why* one wasn't stored so a missing
-    // image is diagnosable: no file means the browser capture failed; the other
-    // notes point at object-storage config/permissions on the server.
-    let screenshotUrl = "";
-    let screenshotKey = "";
-    let screenshotNote = "";
-    const file = form.get("screenshot");
-    if (!(file instanceof File) || file.size === 0) {
-      screenshotNote = messages.noScreenshotCaptured;
+    // Best-effort screenshots (zero or more). We record *why* any were dropped so
+    // a missing image is diagnosable: no file means nothing was attached/captured;
+    // the other notes point at object-storage config/permissions on the server.
+    const files = form
+      .getAll("screenshot")
+      .filter((f): f is File => f instanceof File && f.size > 0);
+    const screenshots: BugScreenshot[] = [];
+    const notes: string[] = [];
+    if (files.length === 0) {
+      notes.push(messages.noScreenshotCaptured);
     } else if (!upload || !upload.isConfigured()) {
-      screenshotNote = messages.storageNotConfigured;
-    } else if (!SHOT_EXT_BY_MIME[file.type]) {
-      screenshotNote = messages.unsupportedType(file.type);
-    } else if (file.size > limits.maxScreenshotBytes) {
-      screenshotNote = messages.screenshotTooLarge;
+      notes.push(messages.storageNotConfigured);
     } else {
-      const key = `bugs/${new Date().getFullYear()}/${randomUUID()}.${SHOT_EXT_BY_MIME[file.type]}`;
-      try {
-        const buffer = Buffer.from(await file.arrayBuffer());
-        screenshotUrl = await upload.upload(key, buffer, file.type);
-        screenshotKey = key;
-      } catch (err) {
-        screenshotNote = messages.uploadFailed(
-          err instanceof Error ? err.message : "unknown error",
-        );
+      for (const file of files) {
+        if (!SHOT_EXT_BY_MIME[file.type]) {
+          notes.push(messages.unsupportedType(file.type));
+          continue;
+        }
+        if (file.size > limits.maxScreenshotBytes) {
+          notes.push(messages.screenshotTooLarge);
+          continue;
+        }
+        const key = `bugs/${new Date().getFullYear()}/${randomUUID()}.${SHOT_EXT_BY_MIME[file.type]}`;
+        try {
+          const buffer = Buffer.from(await file.arrayBuffer());
+          const url = await upload.upload(key, buffer, file.type);
+          screenshots.push({ url, key });
+        } catch (err) {
+          notes.push(
+            messages.uploadFailed(err instanceof Error ? err.message : "unknown error"),
+          );
+        }
       }
     }
+    const screenshotNote = notes.join("; ");
 
     const report = await persistence.create({
       reporterId: actor?.id ?? null,
@@ -114,8 +122,7 @@ export function createBugReportHandlers(
       reporterEmail: actor?.email,
       title: title.slice(0, limits.titleMax),
       description: description.slice(0, limits.descriptionMax),
-      screenshotUrl,
-      screenshotKey,
+      screenshots,
       screenshotNote,
       pageUrl,
       userAgent: (request.headers.get("user-agent") ?? "").slice(0, 400),
@@ -134,7 +141,8 @@ export function createBugReportHandlers(
       {
         ok: true,
         id: report.id,
-        screenshotSaved: Boolean(screenshotUrl),
+        screenshotSaved: screenshots.length > 0,
+        screenshotCount: screenshots.length,
         screenshotNote,
       },
       201,

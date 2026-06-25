@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- AWS SDK is an optional peer
    imported dynamically; we avoid a hard type dependency on it. */
-import type { UploadAdapter } from "../server/types";
+import type { UploadAdapter } from "../server/types.js";
 
 export interface S3UploadOptions {
   bucket?: string;

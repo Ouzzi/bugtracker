@@ -1,13 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { themeVars, type BugReportTheme } from "./theme";
+import { themeVars, type BugReportTheme } from "./theme.js";
 import {
   DEFAULT_STATUSES,
   DEFAULT_STATUS_LABELS,
   type BugReportRecord,
   type BugStatus,
-} from "../types";
+} from "../types.js";
 
 export interface BugTrackerViewProps {
   /** Base path of the bug API. Default `/api/bugs`. */
@@ -199,11 +199,19 @@ function BugCard({
 
       {bug.description && <p className="bgt-card-body">{bug.description}</p>}
 
-      {bug.screenshotUrl ? (
-        <a href={bug.screenshotUrl} target="_blank" rel="noopener noreferrer">
-          {/* eslint-disable-next-line @next/next/no-img-element -- external asset, opens full size */}
-          <img className="bgt-card-shot" src={bug.screenshotUrl} alt={`Screenshot for "${bug.title}"`} />
-        </a>
+      {bug.screenshots.length > 0 ? (
+        <div className="bgt-card-shots">
+          {bug.screenshots.map((shot, i) => (
+            <a key={shot.url || i} href={shot.url} target="_blank" rel="noopener noreferrer">
+              {/* eslint-disable-next-line @next/next/no-img-element -- external asset, opens full size */}
+              <img
+                className="bgt-card-shot"
+                src={shot.url}
+                alt={`Screenshot ${i + 1} for "${bug.title}"`}
+              />
+            </a>
+          ))}
+        </div>
       ) : bug.screenshotNote ? (
         <p className="bgt-hint" style={{ marginTop: "0.75rem" }}>
           {STRINGS.noShot} — {bug.screenshotNote}

@@ -5,8 +5,8 @@ import type {
   ListQuery,
   NewBugReport,
   UpdatePatch,
-} from "../types";
-import type { PersistenceAdapter } from "../server/types";
+} from "../types.js";
+import type { PersistenceAdapter } from "../server/types.js";
 
 type AnyDoc = Record<string, any>;
 
@@ -50,8 +50,13 @@ function toRecord(doc: AnyDoc): BugReportRecord {
     reporterEmail: populated ? (u.email ?? undefined) : undefined,
     title: doc.title ?? "",
     description: doc.description ?? "",
-    screenshotUrl: doc.screenshotUrl ?? "",
-    screenshotKey: doc.screenshotKey ?? "",
+    // Prefer the screenshots array; fall back to a legacy single-screenshot row.
+    screenshots:
+      Array.isArray(doc.screenshots) && doc.screenshots.length
+        ? doc.screenshots.map((s: AnyDoc) => ({ url: s.url, key: s.key ?? undefined }))
+        : doc.screenshotUrl
+          ? [{ url: doc.screenshotUrl, key: doc.screenshotKey || undefined }]
+          : [],
     screenshotNote: doc.screenshotNote ?? "",
     pageUrl: doc.pageUrl ?? "",
     userAgent: doc.userAgent ?? "",
@@ -73,8 +78,7 @@ async function buildDefaultModel(): Promise<MongooseBugModel> {
       userId: { type: Schema.Types.ObjectId, ref: "User" },
       title: { type: String, required: true, trim: true },
       description: { type: String, default: "" },
-      screenshotUrl: { type: String, default: "" },
-      screenshotKey: { type: String, default: "" },
+      screenshots: { type: [{ url: String, key: String }], default: [] },
       screenshotNote: { type: String, default: "" },
       pageUrl: { type: String, default: "" },
       userAgent: { type: String, default: "" },
@@ -116,8 +120,7 @@ export function createMongoosePersistence(
         userId: input.reporterId ?? undefined,
         title: input.title,
         description: input.description,
-        screenshotUrl: input.screenshotUrl,
-        screenshotKey: input.screenshotKey,
+        screenshots: input.screenshots,
         screenshotNote: input.screenshotNote,
         pageUrl: input.pageUrl,
         userAgent: input.userAgent,

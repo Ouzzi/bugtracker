@@ -4,7 +4,7 @@ import type {
   ListQuery,
   NewBugReport,
   UpdatePatch,
-} from "../types";
+} from "../types.js";
 
 // ---- Adapters: every host-specific concern is injected through one of these. ---
 
