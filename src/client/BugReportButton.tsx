@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { capturePage } from "./capture.js";
 import { themeVars, type BugReportTheme } from "./theme.js";
@@ -70,6 +70,10 @@ export interface BugReportButtonProps {
   /** Called with a human-readable message when a submit fails. */
   onError?: (message: string) => void;
 }
+
+// The server only stores these (SHOT_EXT_BY_MIME in the handler). Keep the
+// client picker/paste in sync so we never attach something the server rejects.
+const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 interface Shot {
   id: string;
@@ -174,20 +178,34 @@ export function BugReportButton({
     setError("");
   }, []);
 
+  // Revoke any outstanding object URLs if the component unmounts while the dialog
+  // is open (e.g. an SPA route change), which reset()/removeShot() wouldn't catch.
+  const shotsRef = useRef<Shot[]>([]);
+  shotsRef.current = shots;
+  useEffect(
+    () => () => {
+      shotsRef.current.forEach((s) => URL.revokeObjectURL(s.url));
+    },
+    [],
+  );
+
   async function startReport() {
     if (capturing) return;
     setCapturing(true);
-    // Capture before opening the dialog so the form is never in the screenshot.
-    const blob = captureScreenshot ? await capturePage() : null;
-    if (blob) addShot(blob);
-    setOpen(true);
-    setCapturing(false);
+    try {
+      // Capture before opening the dialog so the form is never in the screenshot.
+      const blob = captureScreenshot ? await capturePage() : null;
+      if (blob) addShot(blob);
+      setOpen(true);
+    } finally {
+      setCapturing(false);
+    }
   }
 
   function addImageFiles(files: FileList | File[] | null | undefined) {
     if (!files) return;
     for (const file of Array.from(files)) {
-      if (file.type.startsWith("image/")) addShot(file);
+      if (ACCEPTED_IMAGE_TYPES.includes(file.type)) addShot(file);
     }
   }
 
@@ -203,10 +221,12 @@ export function BugReportButton({
     const images: File[] = [];
     let hasText = false;
     for (const item of Array.from(items)) {
-      if (item.kind === "file" && item.type.startsWith("image/")) {
+      if (item.kind === "file" && ACCEPTED_IMAGE_TYPES.includes(item.type)) {
         const file = item.getAsFile();
         if (file) images.push(file);
-      } else if (item.kind === "string") {
+      } else if (item.kind === "string" && item.type === "text/plain") {
+        // Only real text counts; ignore the text/html or text/uri-list that some
+        // apps add alongside a copied image, which isn't text the user wants.
         hasText = true;
       }
     }
@@ -241,14 +261,20 @@ export function BugReportButton({
       const res = await fetch(endpoint, { method: "POST", body: fd });
       const data = (await res.json().catch(() => ({}))) as BugSubmitResult;
       if (!res.ok) {
-        onError?.((data.error as string) ?? "Could not send the report");
+        const message =
+          typeof data.error === "string" ? data.error : "Could not send the report";
+        // Show inline too, so a failure is never silent when no onError is wired.
+        setError(message);
+        onError?.(message);
         return;
       }
       onSubmitted?.(data);
       setOpen(false);
       reset();
     } catch {
-      onError?.("Could not send the report");
+      const message = "Could not send the report";
+      setError(message);
+      onError?.(message);
     } finally {
       setSubmitting(false);
     }
@@ -316,10 +342,10 @@ export function BugReportButton({
             <div className="bgt-field">
               <span className="bgt-label">{labels.screenshotLabel}</span>
               <div className="bgt-shots">
-                {shots.map((s) => (
+                {shots.map((s, i) => (
                   <div key={s.id} className="bgt-shot-item">
                     {/* eslint-disable-next-line @next/next/no-img-element -- local object URL */}
-                    <img className="bgt-shot-thumb" src={s.url} alt="Attached screenshot" />
+                    <img className="bgt-shot-thumb" src={s.url} alt={`Attached screenshot ${i + 1}`} />
                     <button
                       type="button"
                       className="bgt-shot-remove"
@@ -343,7 +369,7 @@ export function BugReportButton({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept={ACCEPTED_IMAGE_TYPES.join(",")}
                 multiple
                 className="bgt-file-hidden"
                 onChange={onPickFiles}

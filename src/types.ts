@@ -36,7 +36,9 @@ export function toScreenshots(row: {
   if (Array.isArray(row.screenshots) && row.screenshots.length) {
     return row.screenshots
       .filter((s): s is { url: unknown; key?: unknown } => !!s && typeof s === "object")
-      .map((s) => ({ url: String(s.url ?? ""), key: s.key ? String(s.key) : undefined }));
+      .map((s) => ({ url: String(s.url ?? ""), key: s.key ? String(s.key) : undefined }))
+      // Drop entries with no usable URL so a malformed row never yields a broken <img>.
+      .filter((s) => s.url);
   }
   if (row.screenshotUrl) {
     return [

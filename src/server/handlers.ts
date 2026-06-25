@@ -59,7 +59,13 @@ export function createBugReportHandlers(
   config: BugtrackerServerConfig,
 ): BugReportHandlers {
   const { persistence, auth, upload, notify, rateLimit, project, onAudit } = config;
-  const limits: BugtrackerLimits = { ...DEFAULT_LIMITS, ...config.limits };
+  const limits: BugtrackerLimits = {
+    ...DEFAULT_LIMITS,
+    ...config.limits,
+    // `rate` is a nested object — deep-merge so a partial override (e.g. just
+    // `count`) can't drop `windowMs` and silently disable rate limiting.
+    rate: { ...DEFAULT_LIMITS.rate, ...config.limits?.rate },
+  };
   const messages: BugtrackerMessages = { ...DEFAULT_MESSAGES, ...config.messages };
   const statuses: readonly BugStatus[] = config.statuses ?? DEFAULT_STATUSES;
 
@@ -118,7 +124,11 @@ export function createBugReportHandlers(
           try {
             const buffer = Buffer.from(await file.arrayBuffer());
             const url = await upload.upload(key, buffer, file.type);
-            return { shot: { url, key } as BugScreenshot };
+            // A misbehaving adapter could resolve to an empty URL; don't record a
+            // screenshot that points at nothing — surface it as an upload failure.
+            if (!url) return { note: messages.uploadFailed("empty URL from upload adapter") };
+            const shot: BugScreenshot = { url, key };
+            return { shot };
           } catch (err) {
             return {
               note: messages.uploadFailed(err instanceof Error ? err.message : "unknown error"),
@@ -131,7 +141,8 @@ export function createBugReportHandlers(
         else if (r.note) notes.push(r.note);
       }
     }
-    const screenshotNote = notes.join("; ");
+    // De-dup so e.g. three oversized files don't repeat the same note three times.
+    const screenshotNote = [...new Set(notes)].join("; ");
 
     const report = await persistence.create({
       reporterId: actor?.id ?? null,
@@ -171,8 +182,14 @@ export function createBugReportHandlers(
     if (!actor || !actor.isAdmin) return jsonError(messages.forbidden, 403);
 
     const { searchParams } = new URL(request.url);
-    const limit = Math.min(Math.max(Number(searchParams.get("limit") ?? 50), 1), 100);
-    const skip = Math.max(Number(searchParams.get("skip") ?? 0), 0);
+    // Non-numeric query params (`?limit=abc`) must fall back, not propagate NaN
+    // into the persistence adapter (Mongoose `.limit(NaN)` throws).
+    const toInt = (v: string | null, fallback: number) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : fallback;
+    };
+    const limit = Math.min(Math.max(toInt(searchParams.get("limit"), 50), 1), 100);
+    const skip = Math.max(toInt(searchParams.get("skip"), 0), 0);
     const statusParam = searchParams.get("status");
     const status =
       statusParam && statuses.includes(statusParam) ? statusParam : undefined;
