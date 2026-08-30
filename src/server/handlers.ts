@@ -182,11 +182,19 @@ export function createBugReportHandlers(
     if (!actor || !actor.isAdmin) return jsonError(messages.forbidden, 403);
 
     const { searchParams } = new URL(request.url);
-    // Non-numeric query params (`?limit=abc`) must fall back, not propagate NaN
-    // into the persistence adapter (Mongoose `.limit(NaN)` throws).
-    const toInt = (v: string | null, fallback: number) => {
+    // An absent or blank param must take the fallback, and a non-numeric one
+    // (`?limit=abc`) must fall back too rather than propagate NaN into the
+    // persistence adapter (Mongoose `.limit(NaN)` throws).
+    //
+    // The emptiness check has to come FIRST: `Number(null)` and `Number("")`
+    // are both `0`, a finite number, so an `isFinite` test alone accepts them
+    // and the fallback never runs. That is how a missing `?limit` used to end
+    // up clamped to 1 — the triage list showed a single report while `total`
+    // said seven.
+    const toInt = (v: string | null | undefined, fallback: number) => {
+      if (v === null || v === undefined || v.trim() === "") return fallback;
       const n = Number(v);
-      return Number.isFinite(n) ? n : fallback;
+      return Number.isFinite(n) ? Math.trunc(n) : fallback;
     };
     const limit = Math.min(Math.max(toInt(searchParams.get("limit"), 50), 1), 100);
     const skip = Math.max(toInt(searchParams.get("skip"), 0), 0);
