@@ -5,6 +5,8 @@ import type { BugReportRecord } from "../src/types";
 
 function memoryPersistence() {
   const rows: BugReportRecord[] = [];
+  /** Every query the GET handler handed down, so tests can assert the paging it derived. */
+  const listCalls: Parameters<PersistenceAdapter["list"]>[0][] = [];
   let seq = 0;
   const adapter: PersistenceAdapter = {
     async create(input) {
@@ -21,6 +23,7 @@ function memoryPersistence() {
       return rec;
     },
     async list(q) {
+      listCalls.push(q);
       const filtered = q.status ? rows.filter((b) => b.status === q.status) : rows;
       return { bugs: filtered.slice(q.skip, q.skip + q.limit), total: filtered.length };
     },
@@ -31,7 +34,7 @@ function memoryPersistence() {
       return rec;
     },
   };
-  return { rows, adapter };
+  return { rows, adapter, listCalls };
 }
 
 function makeHandlers(actor: Actor | null, opts: { rateOk?: boolean } = {}) {
@@ -168,16 +171,77 @@ describe("createBugReportHandlers", () => {
     expect(body.screenshotNote).toContain("upload failed");
   });
 
-  it("ignores a non-numeric ?limit instead of passing NaN to the adapter", async () => {
-    const { collection, store } = makeHandlers(admin);
-    await collection.POST(form({ title: "one" }));
-    const res = await collection.GET(
-      new Request("http://localhost/api/bugs?limit=abc&skip=xyz"),
-    );
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(store.rows).toHaveLength(1);
-    expect(body.bugs).toHaveLength(1); // NaN limit would slice to an empty list
+  describe("triage paging", () => {
+    /** An admin handler set with `count` reports already filed. */
+    async function seeded(count: number) {
+      const h = makeHandlers(admin);
+      for (let i = 0; i < count; i++) await h.collection.POST(form({ title: `bug ${i}` }));
+      return h;
+    }
+    /** Runs the triage GET with `query` appended and reports what the adapter saw. */
+    async function list(h: Awaited<ReturnType<typeof seeded>>, query: string) {
+      const res = await h.collection.GET(new Request(`http://localhost/api/bugs${query}`));
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      return { body, q: h.store.listCalls[h.store.listCalls.length - 1] };
+    }
+
+    it("defaults a missing ?limit to 50, not to 1", async () => {
+      // Regression: `Number(null)` is 0 — finite — so the old `isFinite` guard
+      // accepted it, the fallback never ran, and the clamp turned it into 1.
+      // The list then showed a single report while `total` said three.
+      const h = await seeded(3);
+      const { body, q } = await list(h, "");
+      expect(q.limit).toBe(50);
+      expect(q.skip).toBe(0);
+      expect(body.bugs).toHaveLength(3);
+      expect(body.total).toBe(3);
+    });
+
+    it("defaults a blank ?limit= to 50 as well", async () => {
+      // `Number("")` is 0 too, so the empty string fell into the same hole.
+      const h = await seeded(3);
+      const { body, q } = await list(h, "?limit=&skip=");
+      expect(q.limit).toBe(50);
+      expect(q.skip).toBe(0);
+      expect(body.bugs).toHaveLength(3);
+    });
+
+    it("ignores a non-numeric ?limit instead of passing NaN to the adapter", async () => {
+      const h = await seeded(3);
+      const { body, q } = await list(h, "?limit=abc&skip=xyz");
+      expect(q.limit).toBe(50);
+      expect(q.skip).toBe(0);
+      expect(body.bugs).toHaveLength(3); // a NaN limit would slice to an empty list
+    });
+
+    it("respects an explicit ?limit=1", async () => {
+      const h = await seeded(3);
+      const { body, q } = await list(h, "?limit=1");
+      expect(q.limit).toBe(1);
+      expect(body.bugs).toHaveLength(1);
+      expect(body.total).toBe(3); // the counter still reports the full set
+    });
+
+    it("respects ?skip and pages through the set", async () => {
+      const h = await seeded(3);
+      const { body, q } = await list(h, "?limit=2&skip=2");
+      expect(q).toMatchObject({ limit: 2, skip: 2 });
+      expect(body.bugs).toHaveLength(1);
+    });
+
+    it("clamps an out-of-range ?limit and a negative ?skip", async () => {
+      const h = await seeded(1);
+      expect((await list(h, "?limit=999")).q.limit).toBe(100);
+      expect((await list(h, "?limit=0")).q.limit).toBe(1);
+      expect((await list(h, "?limit=-7")).q.limit).toBe(1);
+      expect((await list(h, "?skip=-5")).q.skip).toBe(0);
+    });
+
+    it("truncates a fractional ?limit to a whole number", async () => {
+      const h = await seeded(1);
+      expect((await list(h, "?limit=2.9")).q.limit).toBe(2);
+    });
   });
 
   it("blocks 429 when rate limited", async () => {
