@@ -1,8 +1,13 @@
 {
   "name": "@oussama/bugtracker",
   "version": "0.1.0",
+  "private": true,
   "description": "Drop-in bug reporter (floating button + modal, screenshot capture) and triage UI, framework-light and persistence-agnostic.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ouzzi/bugtracker.git"
+  },
   "type": "module",
   "sideEffects": [
     "*.css"

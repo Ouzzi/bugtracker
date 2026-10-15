@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [20, 24] # 20 = what the NerionWiki builds with
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      # `npm ci` also runs `prepare` (= build), exactly like a Git install does.
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      # Sanity-check the packed contents a Git-dependency consumer receives.
+      - name: Pack check
+        run: |
+          npm pack --dry-run --json > pack.json
+          node -e "const f=require('./pack.json')[0].files.map(x=>x.path); for (const p of ['dist/index.js','dist/index.d.ts','dist/server/index.js','styles.css']) if(!f.includes(p)) { console.error('missing in package: '+p); process.exit(1) } console.log(f.length+' files OK')"
